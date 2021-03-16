@@ -44,8 +44,6 @@ class PANHateSpeechTaskDatasetWrapper:
 
             self.dataset = PanHateSpeechTaskDataset()
 
-        self.profile_files = data_path.glob('*.xml')
-
 
 DATA_LOADERS = {
 
