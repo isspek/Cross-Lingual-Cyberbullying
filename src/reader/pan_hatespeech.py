@@ -112,7 +112,6 @@ def eda(data_path, lang):
         f'Hatespeech spreaders use mean of {np.mean(hatespeech_profiles.post_len)} std {np.std(hatespeech_profiles.post_len)}')
     print(f'Normal profiles use mean of {np.mean(normal_profiles.post_len)} std {np.std(normal_profiles.post_len)}')
 
-
 if __name__ == '__main__':
     parser = ArgumentParser()
     parser = data_args(parser)
