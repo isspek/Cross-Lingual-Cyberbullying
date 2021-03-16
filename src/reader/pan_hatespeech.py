@@ -1,11 +1,11 @@
 from pathlib import Path
 import xml.etree.ElementTree as ET
 import pandas as pd
-from tqdm import tqdm
 from dataclasses import dataclass, field
 import numpy as np
 from typing import List
 from argparse import ArgumentParser
+from src.utils import data_args
 
 AUTHOR_SEP = ':::'
 AUTHOR_ID = 'author_id'
@@ -39,7 +39,7 @@ def convert_dataframe(data_path: str, lang: str):
         root = tree.getroot()
         for child in root:
             posts = []
-            for ch in tqdm(child, total=len(child)):
+            for ch in child:
                 posts.append(ch.text)
 
         author_id = profile_path.stem
@@ -52,6 +52,31 @@ def convert_dataframe(data_path: str, lang: str):
         )
 
     return pd.DataFrame(profiles)
+
+
+def retrieve_joined_texts_targets(data):
+    targets = data[TARGET].to_numpy()
+    ids = data[AUTHOR_ID].to_numpy()
+
+    profiles = data.groupby([TARGET, AUTHOR_ID])
+    joined_posts = []
+    for _, group in profiles:
+        posts = group[POSTS].to_numpy()[0]
+        joined_posts.append(' '.join(posts))
+
+    assert len(ids) == len(targets) == len(joined_posts)
+    return (ids, joined_posts, targets)
+
+
+def prepare_for_pan_baseline(data_path, lang):
+    df = convert_dataframe(data_path=data_path, lang=lang)
+    ids, inputs, targets = retrieve_joined_texts_targets(df)
+    return {
+        'ids': ids,
+        'inputs': inputs,
+        'targets': targets
+
+    }
 
 
 @dataclass
@@ -90,7 +115,6 @@ def eda(data_path, lang):
 
 if __name__ == '__main__':
     parser = ArgumentParser()
-    parser.add_argument('--lang', type=str, help='Language', choices=['en', 'es'])
-    parser.add_argument('--data', type=str, help='Path to dataset')
+    parser = data_args(parser)
     args = parser.parse_args()
     eda(data_path=args.data, lang=args.lang)
