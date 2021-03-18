@@ -11,4 +11,6 @@ python -m src.experiment \
 --pretrained_model bert-base-cased \
 --data data/pan21-author-profiling-training-2021-03-14/en \
 --task pan_hatespeech \
---cv 10
+--cv 10 \
+--train_batch_size 8 \
+--test_batch_size 1

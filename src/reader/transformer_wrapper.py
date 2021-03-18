@@ -2,6 +2,9 @@ from transformers import AutoTokenizer
 from pathlib import Path
 import torch
 from src.reader.pan_hatespeech import AUTHOR_SEP, AUTHOR_ID
+import numpy as np
+from sklearn.model_selection import StratifiedKFold
+from src.utils import RANDOM_SEED
 
 
 class ExistTaskDataset(torch.utils.data.Dataset):
@@ -9,7 +12,7 @@ class ExistTaskDataset(torch.utils.data.Dataset):
 
 
 class PanHateSpeechTaskDataset(torch.utils.data.Dataset):
-    def __init__(self):
+    def __init__(self, files, ground_truth=None):
         pass
 
     def __getitem__(self, item):
@@ -22,14 +25,21 @@ class PanHateSpeechTaskDataset(torch.utils.data.Dataset):
 class PANHateSpeechTaskDatasetWrapper:
 
     def create_cv_folds(self):
-        print(self.profile_files)
-        pass
+        kf = StratifiedKFold(n_splits=self.cv, random_state=RANDOM_SEED, shuffle=True)
+        train_folds = []
+        test_folds = []
+        for train_index, test_index in kf.split(self.profile_files, list(self.ground_truth.values())):
+            train_folds.append(train_index)
+            test_folds.append(test_index)
+
+        return train_folds, test_folds
 
     def __init__(self, args):
+        self.cv = args.cv
         data_path = Path(args.data)
         labels_path = data_path / 'truth.txt'
 
-        self.profile_files = [path for path in data_path.glob('*.xml')]
+        self.profile_files = np.asarray([path for path in data_path.glob('*.xml')])
 
         self.ground_truth = {}
         with open(labels_path, 'r') as r:
@@ -38,10 +48,20 @@ class PANHateSpeechTaskDatasetWrapper:
                 label = label.split(AUTHOR_SEP)
                 self.ground_truth[label[0]] = int(label[1])
 
-        if args.cv:
-            self.dataset = self.create_cv_folds()
-        else:
+        if self.cv:
+            train_folds, test_folds = self.create_cv_folds()
+            self.dataset = []
 
+            for idx, train_fold in enumerate(train_folds):
+                train_files = self.profile_files[train_fold]
+                test_files = self.profile_files[test_folds[idx]]
+                self.dataset.append((PanHateSpeechTaskDataset(train_files, self.ground_truth),
+                                     PanHateSpeechTaskDataset(test_files, self.ground_truth)))
+
+
+
+        else:
+            # TODO for test files, the files without labels
             self.dataset = PanHateSpeechTaskDataset()
 
 
