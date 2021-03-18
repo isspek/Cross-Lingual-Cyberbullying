@@ -5,6 +5,10 @@ from src.reader.pan_hatespeech import AUTHOR_SEP, AUTHOR_ID
 import numpy as np
 from sklearn.model_selection import StratifiedKFold
 from src.utils import RANDOM_SEED
+from pathlib import Path
+import xml.etree.ElementTree as ET
+from transformers import AutoTokenizer
+from torch.utils.data import TensorDataset
 
 
 class ExistTaskDataset(torch.utils.data.Dataset):
@@ -12,14 +16,59 @@ class ExistTaskDataset(torch.utils.data.Dataset):
 
 
 class PanHateSpeechTaskDataset(torch.utils.data.Dataset):
-    def __init__(self, files, ground_truth=None):
-        pass
+    def __init__(self, files, tokenizer, max_seq_len, ground_truth=None, mode='joined'):
+        self.files = files
+        self.ground_truth = ground_truth
+        self.mode = mode
+        self.tokenizer = tokenizer
+        self.max_seq_len = max_seq_len
+
+    @staticmethod
+    def process_text(text):
+        text = text.replace('#URL#', "[URL]")
+        text = text.replace('#HASHTAG#', "[HASHTAG]")
+        text = text.replace('#USER#:', "[USER]")
+        text = text.replace('#USER#', "[USER]")
+        text = text.replace('RT', "[RT]")
+        return text
 
     def __getitem__(self, item):
-        pass
+        selected_files = [self.files[item]]
+        tokenized_texts = []
+        labels = []
+        for profile_file in selected_files:
+            tree = ET.parse(profile_file)
+            root = tree.getroot()
+            labels.append(self.ground_truth[profile_file.stem])
+
+            for child in root:
+                posts = []
+                for ch in child:
+                    posts.append(ch.text)
+
+            if self.mode == 'joined':
+                content = ' '.join(posts)
+                content = PanHateSpeechTaskDataset.process_text(content)
+                tokenized_texts.append(content)
+        if len(tokenized_texts) == 1:
+            encoding = self.tokenizer.encode_plus(tokenized_texts[0], add_special_tokens=True,
+                                                  # Add '[CLS]' and '[SEP]'
+                                                  max_length=self.max_seq_len,
+                                                  padding='max_length',  # Pad & truncate all sentences.
+                                                  truncation=True,
+                                                  return_token_type_ids=False,
+                                                  return_attention_mask=True,  # Construct attn. masks.
+                                                  return_tensors='pt'  # Return pytorch tensors.
+                                                  )
+        # print(self.tokenizer.decode(tokenized_text))
+        return dict(
+            input_ids=encoding['input_ids'],
+            attention_mask=encoding['attention_mask'],
+            labels=torch.LongTensor(labels)
+        )
 
     def __len__(self):
-        pass
+        return len(self.files)
 
 
 class PANHateSpeechTaskDatasetWrapper:
@@ -38,7 +87,9 @@ class PANHateSpeechTaskDatasetWrapper:
         self.cv = args.cv
         data_path = Path(args.data)
         labels_path = data_path / 'truth.txt'
-
+        self.tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
+        self.special_tokens_dict = {'additional_special_tokens': ["[RT]", "[USER]", "[URL]", "[HASHTAG]"]}
+        self.tokenizer.add_special_tokens(self.special_tokens_dict)
         self.profile_files = np.asarray([path for path in data_path.glob('*.xml')])
 
         self.ground_truth = {}
@@ -55,8 +106,12 @@ class PANHateSpeechTaskDatasetWrapper:
             for idx, train_fold in enumerate(train_folds):
                 train_files = self.profile_files[train_fold]
                 test_files = self.profile_files[test_folds[idx]]
-                self.dataset.append((PanHateSpeechTaskDataset(train_files, self.ground_truth),
-                                     PanHateSpeechTaskDataset(test_files, self.ground_truth)))
+                self.dataset.append(
+                    (PanHateSpeechTaskDataset(train_files, max_seq_len=args.max_seq_len, tokenizer=self.tokenizer,
+                                              ground_truth=self.ground_truth, mode=args.input_mode),
+                     PanHateSpeechTaskDataset(test_files, max_seq_len=args.max_seq_len, tokenizer=self.tokenizer,
+                                              ground_truth=self.ground_truth,
+                                              mode=args.input_mode)))
 
 
 
