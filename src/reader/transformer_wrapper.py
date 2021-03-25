@@ -162,7 +162,10 @@ class PANHateSpeechTaskDatasetWrapper:
 
         else:
             # TODO for test files, the files without labels
-            self.dataset = PanHateSpeechTaskDataset()
+            test_files = self.profile_files
+            self.dataset = PanHateSpeechTaskDataset(test_files, max_seq_len=args.max_seq_len, tokenizer=self.tokenizer,
+                                                    ground_truth=self.ground_truth,
+                                                    mode=args.input_mode)
 
 
 DATA_LOADERS = {
