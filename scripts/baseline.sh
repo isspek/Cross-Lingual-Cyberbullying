@@ -42,7 +42,7 @@ python -m src.experiment \
 --cuda \
 --epochs 5 \
 --output_dir trained_models/bert_base_cased_epochs_5_max_len_128_hierarchical_mean_pan \
---dropout 0.1 \
+--dropout 0.1
 
 #python -m src.experiment \
 #--data data/pan21-author-profiling-training-2021-03-14/es \
