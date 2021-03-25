@@ -38,7 +38,7 @@ class Attention(torch.nn.Module):
         self.project = torch.nn.Linear(hidden_dim, attention_dim)  # num_directions*hidden_size,attention_dim,bias = True
         self.context = torch.nn.Linear(attention_dim, 1, bias=False)
         self.linear = torch.nn.Linear(hidden_dim, 1)
-        self.softmax = torch.nn.Softmax(dim=1)
+        self.softmax = torch.nn.Softmax(dim=0)
 
     def forward(self, posts):
         u = torch.tanh(self.project(posts))  # formula 5 [B,T,K]->[B,T,attention_dim]
@@ -47,6 +47,7 @@ class Attention(torch.nn.Module):
         att_weights = self.softmax(att_weights)
         output = torch.bmm(att_weights.unsqueeze(dim=1), posts)
         output = output.sum(dim=1).squeeze(1)  # [B,1,T]*[B,T,K] -> [B,1,K] -> [B,K]
+
         return output, att_weights
 
 
