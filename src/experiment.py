@@ -10,6 +10,8 @@ import numpy as np
 import random
 from src.utils import RANDOM_SEED
 from sklearn.metrics import f1_score, accuracy_score, precision_score, recall_score
+import scipy as sp
+import shap
 
 
 def cv_train():
@@ -92,17 +94,71 @@ def cv_train():
 
 
 def explain():
+    torch.manual_seed(RANDOM_SEED)
+    torch.cuda.manual_seed(RANDOM_SEED)
+    np.random.seed(RANDOM_SEED)
+    random.seed(RANDOM_SEED)
+    torch.backends.cudnn.enabled = False
+    torch.backends.cudnn.deterministic = True
     dataset_loader = DATA_LOADERS[args.task](args)
     model_file = args.model_file
     model = TRANSFORMER_MODELS[args.model](args)
     model.transformer.resize_token_embeddings(len(dataset_loader.tokenizer))
-    if args.cuda:
+    cuda = args.cuda
+
+    # tokenizer = dataset_loader.tokenizer
+
+    if cuda:
         model.to(torch.device('cuda'))
     model.load_state_dict(torch.load(model_file))
 
+    # transformer_model = model.transformer
     dataset = dataset_loader.dataset
-    dataset_loader = DataLoader(dataset=dataset, batch_size=args.train_batch_size, shuffle=False)
-    
+    dataloader = DataLoader(dataset=dataset, batch_size=args.test_batch_size, shuffle=True)
+
+    model.eval()
+    profile_attentions = []
+
+    # this is for single file
+    batch = next(iter(dataloader))
+
+    # this is for profile attentions
+    with torch.no_grad():
+        input_ids = batch['input_ids'].cuda() if cuda else batch['input_ids']
+        attention_mask = batch['attention_mask'].cuda() if cuda else batch['attention_mask']
+        outputs, attentions = model(input_ids, attention_mask)
+
+        print(outputs)
+
+        post_attentions, profile_attention = attentions
+        profile_attention = profile_attention.detach().cpu().numpy().flatten()
+        profile_attentions.append(profile_attention)
+        _, predictions = torch.max(outputs.data, 1)
+
+    # save as pickle object
+    # profile attentions
+    print(profile_attentions)
+
+    tokenizer = dataset_loader.tokenizer
+    transformer_model = model.transformer
+
+    # define a prediction function
+    def f(x):
+        input_ids = batch['input_ids'].cuda() if cuda else batch['input_ids']
+        attention_masks = batch['attention_mask'].cuda() if cuda else batch['attention_mask']
+        for idx, input_id in enumerate(input_ids):
+            input_id = input_id.squeeze(dim=1)  # reduce dimension
+            attention_mask = attention_masks[idx].squeeze(dim=1)
+            outputs = transformer_model(input_id, attention_mask)[0].detach().cpu().numpy()
+            scores = (np.exp(outputs).T / np.exp(outputs).sum(-1)).T
+        val = sp.special.logit(scores[:, 1])  # use one vs rest logit units
+        return val
+
+    # build an explainer using a token masker
+    explainer = shap.Explainer(f, tokenizer)
+    shap_values = explainer(batch)
+    # dataset_loader = DataLoader(dataset=dataset, batch_size=args.train_batch_size, shuffle=False)
+
 
 if __name__ == '__main__':
     parser = ArgumentParser()

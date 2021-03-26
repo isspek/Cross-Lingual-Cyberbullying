@@ -86,7 +86,7 @@ class PanHateSpeechTaskDataset(torch.utils.data.Dataset):
         else:
             input_ids = []
             attention_masks = []
-            for idx, tokenized_text in tqdm(enumerate(tokenized_texts[0])):
+            for idx, tokenized_text in enumerate(tokenized_texts[0]):
                 encoding = self.tokenizer.encode_plus(tokenized_text, add_special_tokens=True,
                                                       # Add '[CLS]' and '[SEP]'
                                                       max_length=self.max_seq_len,

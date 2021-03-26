@@ -5,6 +5,7 @@ import numpy as np
 import torch
 from transformers.optimization import get_linear_schedule_with_warmup
 import torch.nn.functional as F
+import math
 
 
 class TransformerBase(torch.nn.Module):
@@ -28,27 +29,23 @@ class TransformerBase(torch.nn.Module):
 
 
 class Attention(torch.nn.Module):
-    """
-    Attention layer of HAN.
-    """
+    """Scaled dot product attention."""
 
-    def __init__(self, hidden_dim, attention_dim):
-        super().__init__()
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.project = torch.nn.Linear(hidden_dim, attention_dim)  # num_directions*hidden_size,attention_dim,bias = True
-        self.context = torch.nn.Linear(attention_dim, 1, bias=False)
-        self.linear = torch.nn.Linear(hidden_dim, 1)
-        self.softmax = torch.nn.Softmax(dim=0)
+    def __init__(self, hidden_dim, **kwargs):
+        super(Attention, self).__init__(**kwargs)
+        self.projection_layer = torch.nn.Linear(hidden_dim, 1)
 
-    def forward(self, posts):
-        u = torch.tanh(self.project(posts))  # formula 5 [B,T,K]->[B,T,attention_dim]
+    def forward(self, atten_post):
+        posts_attention_values = self.projection_layer(atten_post)
+        posts_attention_weights = F.softmax(posts_attention_values.permute(0, 2, 1), dim=-1)
 
-        att_weights = self.context(u).squeeze(2)
-        att_weights = self.softmax(att_weights)
-        output = torch.bmm(att_weights.unsqueeze(dim=1), posts)
-        output = output.sum(dim=1).squeeze(1)  # [B,1,T]*[B,T,K] -> [B,1,K] -> [B,K]
+        del posts_attention_values
+        torch.cuda.empty_cache()
 
-        return output, att_weights
+        self_atten_output_post = torch.matmul(posts_attention_weights, atten_post)
+        self_atten_output_post = self_atten_output_post.sum(dim=1).squeeze(1)
+
+        return self_atten_output_post, posts_attention_weights
 
 
 class SentenceTransformer(torch.nn.Module):
@@ -61,12 +58,21 @@ class SentenceTransformer(torch.nn.Module):
                                                       torch.nn.Tanh())
         self.dropout = torch.nn.Dropout(p=args.dropout)
         self.attention = args.attention
+
         if self.attention:
-            self.attention_layer = Attention(transformer_config.hidden_size, args.attention_dim)  # max_seq_len * number of posts 200
-        self.linear = torch.nn.Sequential(
-            torch.nn.Linear(transformer_config.hidden_size, transformer_config.hidden_size),
-            torch.nn.Tanh(),
-            torch.nn.Linear(transformer_config.hidden_size, args.num_labels))
+            self.attention_layer = Attention(hidden_dim=transformer_config.hidden_size)
+            # self.linear = torch.nn.Sequential(torch.nn.Linear(transformer_config.hidden_size, args.num_labels),
+            #                                   torch.nn.LogSoftmax(dim=1))
+            self.linear = torch.nn.Sequential(
+                torch.nn.Linear(transformer_config.hidden_size, transformer_config.hidden_size),
+                torch.nn.Tanh(),
+                torch.nn.Linear(transformer_config.hidden_size, args.num_labels))
+
+        else:
+            self.linear = torch.nn.Sequential(
+                torch.nn.Linear(transformer_config.hidden_size, transformer_config.hidden_size),
+                torch.nn.Tanh(),
+                torch.nn.Linear(transformer_config.hidden_size, args.num_labels))
 
     def mean_pooling(self, token_embeddings, attention_mask):
         input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
