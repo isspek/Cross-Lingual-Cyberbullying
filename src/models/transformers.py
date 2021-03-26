@@ -42,8 +42,7 @@ class Attention(torch.nn.Module):
         del posts_attention_values
         torch.cuda.empty_cache()
 
-        self_atten_output_post = torch.matmul(posts_attention_weights, atten_post)
-        self_atten_output_post = self_atten_output_post.sum(dim=1).squeeze(1)
+        self_atten_output_post = torch.matmul(posts_attention_weights, atten_post).squeeze(dim=1)
 
         return self_atten_output_post, posts_attention_weights
 
@@ -61,8 +60,6 @@ class SentenceTransformer(torch.nn.Module):
 
         if self.attention:
             self.attention_layer = Attention(hidden_dim=transformer_config.hidden_size)
-            # self.linear = torch.nn.Sequential(torch.nn.Linear(transformer_config.hidden_size, args.num_labels),
-            #                                   torch.nn.LogSoftmax(dim=1))
             self.linear = torch.nn.Sequential(
                 torch.nn.Linear(transformer_config.hidden_size, transformer_config.hidden_size),
                 torch.nn.Tanh(),
@@ -84,13 +81,13 @@ class SentenceTransformer(torch.nn.Module):
         # list of input_ids and attention mask
         post_encodings = []
         post_attentions = []
+
         for idx, input_id in enumerate(input_ids):
             input_id = input_id.squeeze(dim=1)  # reduce dimension
             attention_mask = attention_masks[idx].squeeze(dim=1)
             output = self.transformer(input_ids=input_id, attention_mask=attention_mask)
             post_encoding = self.mean_pooling(output['last_hidden_state'], attention_mask)
             post_encodings.append(post_encoding)
-            # post_encodings.append(self.transformer_linear(torch.mean(output['last_hidden_state'], 1)))
             post_attentions.append(output['attentions'])
 
         post_encodings = torch.stack(post_encodings)

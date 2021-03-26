@@ -102,7 +102,8 @@ class PanHateSpeechTaskDataset(torch.utils.data.Dataset):
             return dict(
                 input_ids=torch.stack(input_ids),
                 attention_mask=torch.stack(attention_masks),
-                labels=torch.LongTensor(labels)
+                labels=torch.LongTensor(labels),
+                text=tokenized_texts
             )
 
     def __len__(self):

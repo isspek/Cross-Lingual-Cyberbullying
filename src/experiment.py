@@ -10,8 +10,7 @@ import numpy as np
 import random
 from src.utils import RANDOM_SEED
 from sklearn.metrics import f1_score, accuracy_score, precision_score, recall_score
-import scipy as sp
-import shap
+import json
 
 
 def cv_train():
@@ -106,62 +105,76 @@ def explain():
     model.transformer.resize_token_embeddings(len(dataset_loader.tokenizer))
     cuda = args.cuda
 
-    # tokenizer = dataset_loader.tokenizer
-
     if cuda:
-        model.to(torch.device('cuda'))
+        device = torch.device('cuda')
+        model.to(device)
+
     model.load_state_dict(torch.load(model_file))
 
-    # transformer_model = model.transformer
     dataset = dataset_loader.dataset
+    tokenizer = dataset_loader.tokenizer
     dataloader = DataLoader(dataset=dataset, batch_size=args.test_batch_size, shuffle=True)
 
     model.eval()
-    profile_attentions = []
+    results = []
+    for batch_idx, batch in enumerate(dataloader):
 
-    # this is for single file
-    batch = next(iter(dataloader))
+        with torch.no_grad():
+            input_ids = batch['input_ids'].squeeze(1).cuda() if cuda else batch['input_ids'].squeeze(
+                dim=1)
+            attention_masks = batch['attention_mask'].cuda() if cuda else batch['attention_mask']
+            targets = batch['labels'].squeeze(1).cuda() if cuda else batch['labels'].squeeze(1)
+            outputs, attentions = model(input_ids, attention_masks)
 
-    # this is for profile attentions
-    with torch.no_grad():
-        input_ids = batch['input_ids'].cuda() if cuda else batch['input_ids']
-        attention_mask = batch['attention_mask'].cuda() if cuda else batch['attention_mask']
-        outputs, attentions = model(input_ids, attention_mask)
+            predictions = torch.argmax(outputs).cpu().detach().numpy()
+            targets = targets.cpu().detach().numpy().item()
 
-        print(outputs)
+            post_attentions, profile_attention = attentions
 
-        post_attentions, profile_attention = attentions
-        profile_attention = profile_attention.detach().cpu().numpy().flatten()
-        profile_attentions.append(profile_attention)
-        _, predictions = torch.max(outputs.data, 1)
+            squeezed_posts = {}
+            for layer_attention in post_attentions[0]:
+                for post_id, attn in enumerate(layer_attention):
+                    if post_id not in squeezed_posts:
+                        squeezed_posts[post_id] = {}
+                    squeezed_posts[post_id][layer_attention] = attn.squeeze(0)  # num heads - seq len - seq len
 
-    # save as pickle object
-    # profile attentions
-    print(profile_attentions)
+            post_level_results = []
+            for post_id in squeezed_posts.keys():
+                post_text = batch['text'][0][post_id]
+                squeezed_posts[post_id]['all'] = torch.stack([value for value in squeezed_posts[post_id].values()])
+                input_id = input_ids[0][post_id].squeeze(0)
 
-    tokenizer = dataset_loader.tokenizer
-    transformer_model = model.transformer
+                tokens = tokenizer.convert_ids_to_tokens(input_id)
 
-    # define a prediction function
-    def f(x):
-        vals = []
-        input_ids = batch['input_ids'].cuda() if cuda else batch['input_ids']
-        attention_masks = batch['attention_mask'].cuda() if cuda else batch['attention_mask']
-        for idx, input_id in enumerate(input_ids):
-            input_id = input_id.squeeze(dim=1)  # reduce dimension
-            attention_mask = attention_masks[idx].squeeze(dim=1)
-            output = transformer_model(input_id, attention_mask)
-            pooled_output = model.mean_pooling(output['last_hidden_state'], attention_mask).detach().cpu().numpy()
-            scores = (np.exp(pooled_output).T / np.exp(pooled_output).sum(-1)).T
-            val = sp.special.logit(scores[:, 1])  # use one vs rest logit units
-            print(val)
-            vals.append(val)
-        return vals
+                attn_score = []
+                for idx, token in enumerate(tokens):
+                    attn_score.append(squeezed_posts[post_id]['all'].detach().cpu().numpy()[-1, :, 0,
+                                      idx].sum().tolist())  # last layer attn scores
 
-    # build an explainer using a token masker
-    explainer = shap.Explainer(f, tokenizer)
-    shap_values = explainer(batch)
-    # dataset_loader = DataLoader(dataset=dataset, batch_size=args.train_batch_size, shuffle=False)
+                post_level_result = {
+                    'post_id': post_id,
+                    'tokens': tokens,
+                    'att_scores': attn_score,
+                    'post_text': post_text
+                }
+
+                post_level_results.append(post_level_result)
+
+            profile_attention = profile_attention.detach().cpu().numpy().flatten().tolist()
+
+            result = {
+                'profile_id': batch_idx,
+                'profile_attention': profile_attention,
+                'prediction': predictions,
+                'target': targets,
+                'post_level_results': post_level_results
+            }
+
+            results.append(result)
+
+    output_dir = Path(args.output_dir)
+    with open(output_dir, 'w') as fout:
+        json.dump(results, fout)
 
 
 if __name__ == '__main__':
