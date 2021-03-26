@@ -41,7 +41,7 @@ python -m src.experiment \
 --attention_dim 64 \
 --cuda \
 --epochs 5 \
---output_dir trained_models/bert_base_cased_epochs_5_max_len_128_hierarchical_mean_pan \
+--output_dir trained_models/bert_base_cased_epochs_5_max_len_128_hierarchical_mean_pansd \
 --dropout 0.1
 
 #python -m src.experiment \
