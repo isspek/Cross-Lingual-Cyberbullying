@@ -126,7 +126,7 @@ def explain():
             targets = batch['labels'].squeeze(1).cuda() if cuda else batch['labels'].squeeze(1)
             outputs, attentions = model(input_ids, attention_masks)
 
-            predictions = torch.argmax(outputs).cpu().detach().numpy()
+            predictions = torch.argmax(outputs).cpu().detach().numpy().item()
             targets = targets.cpu().detach().numpy().item()
 
             post_attentions, profile_attention = attentions
@@ -150,6 +150,8 @@ def explain():
                 for idx, token in enumerate(tokens):
                     attn_score.append(squeezed_posts[post_id]['all'].detach().cpu().numpy()[-1, :, 0,
                                       idx].sum().tolist())  # last layer attn scores
+
+                post_text = ''.join(post_text)
 
                 post_level_result = {
                     'post_id': post_id,
