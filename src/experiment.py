@@ -144,15 +144,19 @@ def explain():
 
     # define a prediction function
     def f(x):
+        vals = []
         input_ids = batch['input_ids'].cuda() if cuda else batch['input_ids']
         attention_masks = batch['attention_mask'].cuda() if cuda else batch['attention_mask']
         for idx, input_id in enumerate(input_ids):
             input_id = input_id.squeeze(dim=1)  # reduce dimension
             attention_mask = attention_masks[idx].squeeze(dim=1)
-            outputs = transformer_model(input_id, attention_mask)[0].detach().cpu().numpy()
-            scores = (np.exp(outputs).T / np.exp(outputs).sum(-1)).T
-        val = sp.special.logit(scores[:, 1])  # use one vs rest logit units
-        return val
+            output = transformer_model(input_id, attention_mask)
+            pooled_output = model.mean_pooling(output['last_hidden_state'], attention_mask).detach().cpu().numpy()
+            scores = (np.exp(pooled_output).T / np.exp(pooled_output).sum(-1)).T
+            val = sp.special.logit(scores[:, 1])  # use one vs rest logit units
+            print(val)
+            vals.append(val)
+        return vals
 
     # build an explainer using a token masker
     explainer = shap.Explainer(f, tokenizer)
