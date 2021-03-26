@@ -131,19 +131,45 @@ class PANHateSpeechTaskDatasetWrapper:
 
     def __init__(self, args):
         self.cv = args.cv
-        data_path = Path(args.data)
-        labels_path = data_path / 'truth.txt'
         self.tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
         self.special_tokens_dict = PANHateSpeechTaskDatasetWrapper.SPECIAL_TOKENS[args.input_mode]
         self.tokenizer.add_special_tokens(self.special_tokens_dict)
-        self.profile_files = np.asarray([path for path in data_path.glob('*.xml')])
 
-        self.ground_truth = {}
-        with open(labels_path, 'r') as r:
-            labels = r.readlines()
-            for label in labels:
-                label = label.split(AUTHOR_SEP)
-                self.ground_truth[label[0]] = int(label[1])
+        if args.lang == 'en_es' or args.lang == 'es_en':
+            data_path = Path(args.data)
+            lang_en = data_path / 'en'
+            files_en = np.asarray([path for path in lang_en.glob('*.xml')])
+            lang_es = data_path / 'es'
+            files_es = np.asarray([path for path in lang_es.glob('*.xml')])
+            self.profile_files = np.concatenate((files_en, files_es), axis=None)
+
+            labels_path_en = data_path / 'en' / 'truth.txt'
+            self.ground_truth = {}
+            with open(labels_path_en, 'r') as r:
+                labels = r.readlines()
+                for label in labels:
+                    label = label.split(AUTHOR_SEP)
+                    self.ground_truth[label[0]] = int(label[1])
+
+            labels_path_es = data_path / 'es' / 'truth.txt'
+            with open(labels_path_es, 'r') as r:
+                labels = r.readlines()
+                for label in labels:
+                    label = label.split(AUTHOR_SEP)
+                    self.ground_truth[label[0]] = int(label[1])
+
+        else:
+            data_path = Path(args.data)
+            labels_path = data_path / 'truth.txt'
+
+            self.profile_files = np.asarray([path for path in data_path.glob('*.xml')])
+
+            self.ground_truth = {}
+            with open(labels_path, 'r') as r:
+                labels = r.readlines()
+                for label in labels:
+                    label = label.split(AUTHOR_SEP)
+                    self.ground_truth[label[0]] = int(label[1])
 
         if self.cv:
             train_folds, test_folds = self.create_cv_folds()
