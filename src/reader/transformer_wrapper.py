@@ -67,7 +67,7 @@ class PanHateSpeechTaskDataset(torch.utils.data.Dataset):
                         posts.append(PanHateSpeechTaskDataset.process_text(ch.text))
                 tokenized_texts.append(posts)
 
-        if np.asarray(tokenized_texts).shape[1] == 1:
+        if self.mode == 'joined':
             encoding = self.tokenizer.encode_plus(tokenized_texts[0], add_special_tokens=True,
                                                   # Add '[CLS]' and '[SEP]'
                                                   max_length=self.max_seq_len,
