@@ -37,10 +37,15 @@ class PanHateSpeechTaskDataset(torch.utils.data.Dataset):
         selected_files = [self.files[item]]
         tokenized_texts = []
         labels = []
+        author_ids = []
         for profile_file in selected_files:
             tree = ET.parse(profile_file)
             root = tree.getroot()
-            labels.append(self.ground_truth[profile_file.stem])
+
+            if self.ground_truth:
+                labels.append(self.ground_truth[profile_file.stem])
+
+            author_ids.append(profile_file.stem)
 
             if self.mode == 'joined':
                 for child in root:
@@ -77,12 +82,22 @@ class PanHateSpeechTaskDataset(torch.utils.data.Dataset):
                                                   return_attention_mask=True,  # Construct attn. masks.
                                                   return_tensors='pt'  # Return pytorch tensors.
                                                   )
-            return dict(
-                input_ids=encoding['input_ids'],
-                attention_mask=encoding['attention_mask'],
-                labels=torch.LongTensor(labels)
-            )
 
+            if self.ground_truth:
+                return dict(
+                    input_ids=encoding['input_ids'],
+                    attention_mask=encoding['attention_mask'],
+                    labels=torch.LongTensor(labels),
+                    text=tokenized_texts,
+                    author_id=author_ids,
+                )
+            else:
+                return dict(
+                    input_ids=encoding['input_ids'],
+                    attention_mask=encoding['attention_mask'],
+                    text=tokenized_texts,
+                    author_id=author_ids,
+                )
         else:
             input_ids = []
             attention_masks = []
@@ -99,12 +114,21 @@ class PanHateSpeechTaskDataset(torch.utils.data.Dataset):
                 input_ids.append(encoding['input_ids'])
                 attention_masks.append(encoding['attention_mask'])
 
-            return dict(
-                input_ids=torch.stack(input_ids),
-                attention_mask=torch.stack(attention_masks),
-                labels=torch.LongTensor(labels),
-                text=tokenized_texts
-            )
+            if self.ground_truth:
+                return dict(
+                    input_ids=torch.stack(input_ids),
+                    attention_mask=torch.stack(attention_masks),
+                    labels=torch.LongTensor(labels),
+                    text=tokenized_texts,
+                    author_id=author_ids,
+                )
+            else:
+                return dict(
+                    input_ids=torch.stack(input_ids),
+                    attention_mask=torch.stack(attention_masks),
+                    text=tokenized_texts,
+                    author_id=author_ids,
+                )
 
     def __len__(self):
         return len(self.files)
@@ -160,16 +184,20 @@ class PANHateSpeechTaskDatasetWrapper:
 
         else:
             data_path = Path(args.data)
-            labels_path = data_path / 'truth.txt'
 
             self.profile_files = np.asarray([path for path in data_path.glob('*.xml')])
 
-            self.ground_truth = {}
-            with open(labels_path, 'r') as r:
-                labels = r.readlines()
-                for label in labels:
-                    label = label.split(AUTHOR_SEP)
-                    self.ground_truth[label[0]] = int(label[1])
+            labels_path = data_path / 'truth.txt'
+
+            if labels_path.exists():
+                self.ground_truth = {}
+                with open(labels_path, 'r') as r:
+                    labels = r.readlines()
+                    for label in labels:
+                        label = label.split(AUTHOR_SEP)
+                        self.ground_truth[label[0]] = int(label[1])
+            else:
+                self.ground_truth = None
 
         if self.cv:
             train_folds, test_folds = self.create_cv_folds()

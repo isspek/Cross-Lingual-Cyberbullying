@@ -11,6 +11,7 @@ import random
 from src.utils import RANDOM_SEED
 from sklearn.metrics import f1_score, accuracy_score, precision_score, recall_score
 import json
+import xml.etree.ElementTree as ET
 
 
 def cv_train():
@@ -179,6 +180,69 @@ def explain():
         json.dump(results, fout)
 
 
+def pan():
+    torch.manual_seed(RANDOM_SEED)
+    torch.cuda.manual_seed(RANDOM_SEED)
+    np.random.seed(RANDOM_SEED)
+    random.seed(RANDOM_SEED)
+    torch.backends.cudnn.enabled = False
+    torch.backends.cudnn.deterministic = True
+
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    lang = args.lang
+
+    model_dir = Path(args.model_file)  # since this is 10 fold, it is directory not a file
+
+    fold_models = np.asarray([path for path in model_dir.glob('*.pt')])
+
+    results = {}
+
+    for fold_model in fold_models:
+
+        print(f'Predictions for model {fold_model}')
+
+        dataset_loader = DATA_LOADERS[args.task](args)
+        model = TRANSFORMER_MODELS[args.model](args)
+        model.transformer.resize_token_embeddings(len(dataset_loader.tokenizer))
+        cuda = args.cuda
+
+        if cuda:
+            device = torch.device('cuda')
+            model.to(device)
+
+        model.load_state_dict(torch.load(fold_model))
+
+        dataset = dataset_loader.dataset
+        dataloader = DataLoader(dataset=dataset, batch_size=args.test_batch_size, shuffle=True)
+
+        model.eval()
+
+        for batch_idx, batch in enumerate(dataloader):
+
+            with torch.no_grad():
+                input_ids = batch['input_ids'].squeeze(1).cuda() if cuda else batch['input_ids'].squeeze(
+                    dim=1)
+                attention_masks = batch['attention_mask'].cuda() if cuda else batch['attention_mask']
+                author_ids = batch['author_id']
+                outputs, attentions = model(input_ids, attention_masks)
+
+                predictions = torch.argmax(outputs, dim=1).cpu().detach().numpy()
+                author_ids = list(author_ids[0])
+
+                for idx, author_id in enumerate(author_ids):
+                    if author_id not in results:
+                        results[author_id] = []
+
+                    results[author_id].append(predictions[idx])
+
+    for user_id, predictions in results.items():
+        final_label = np.amax(np.asarray(predictions), axis=0).item()
+        root = ET.Element("author", id=user_id, lang=lang, type=str(final_label))
+        tree = ET.ElementTree(root)
+        tree.write(output_dir / f'{user_id}.xml')
+
+
 if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('--model_output_dir', help='Enter the directory to save the trained models')
@@ -191,6 +255,7 @@ if __name__ == '__main__':
     parser.add_argument('--test_batch_size', type=int)
     parser.add_argument('--cv', type=int, help='It perform n fold cross validation training')
     parser.add_argument('--explain', action='store_true')
+    parser.add_argument('--pan', action='store_true')
     parser.add_argument('--input_mode', type=str)
     parser.add_argument('--lr', type=float)
     parser.add_argument('--max_seq_len', type=int)
@@ -205,9 +270,13 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if args.cv:
-        print(f'CV Training mode is selected.')
+        print('CV Training mode is selected.')
         cv_train()
 
     if args.explain:
-        print(f'Explaining mode is selected.')
+        print('Explaining mode is selected.')
         explain()
+
+    if args.pan:
+        print('Run the software to get the results for PAN')
+        pan()

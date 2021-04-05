@@ -32,7 +32,7 @@ python -m src.experiment \
 --cv 10 \
 --train_batch_size 2 \
 --test_batch_size 1 \
---input_mode joined \
+--input_mode joined_post_aware \
 --tokenizer distilbert-base-multilingual-cased \
 --num_labels 2 \
 --lr 3e-5 \
@@ -40,7 +40,7 @@ python -m src.experiment \
 --attention \
 --cuda \
 --epochs 5 \
---output_dir trained_models/distilbert-base-multilingual-cased_joined_en_es \
+--output_dir trained_models/distilbert-base-multilingual-cased_joined_en_es_cv_new_10 \
 --dropout 0.1
 
 #python -m src.experiment \
