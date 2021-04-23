@@ -187,11 +187,9 @@ def pan():
     random.seed(RANDOM_SEED)
     torch.backends.cudnn.enabled = False
     torch.backends.cudnn.deterministic = True
-
-    output_dir = Path(args.output_dir)
-
-    output_dir.mkdir(parents=True, exist_ok=True)
     lang = args.lang
+    output_dir = Path(args.output_dir) / lang
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     model_dir = Path(args.model_file)  # since this is 5 fold, it is directory not a file
 
