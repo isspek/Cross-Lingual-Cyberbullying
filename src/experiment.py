@@ -189,10 +189,11 @@ def pan():
     torch.backends.cudnn.deterministic = True
 
     output_dir = Path(args.output_dir)
+
     output_dir.mkdir(parents=True, exist_ok=True)
     lang = args.lang
 
-    model_dir = Path(args.model_file)  # since this is 10 fold, it is directory not a file
+    model_dir = Path(args.model_file)  # since this is 5 fold, it is directory not a file
 
     fold_models = np.asarray([path for path in model_dir.glob('*.pt')])
 
@@ -209,9 +210,11 @@ def pan():
 
         if cuda:
             device = torch.device('cuda')
-            model.to(device)
+        else:
+            device = torch.device('cpu')
 
-        model.load_state_dict(torch.load(fold_model))
+        model.to(device)
+        model.load_state_dict(torch.load(fold_model, map_location=device))
 
         dataset = dataset_loader.dataset
         dataloader = DataLoader(dataset=dataset, batch_size=args.test_batch_size, shuffle=True)
@@ -236,6 +239,8 @@ def pan():
 
                     results[author_id].append(predictions[idx])
 
+    print(f'Number of results {len(results)}')
+    print(f'Results are recording {output_dir}')
     for user_id, predictions in results.items():
         final_label = np.amax(np.asarray(predictions), axis=0).item()
         root = ET.Element("author", id=user_id, lang=lang, type=str(final_label))

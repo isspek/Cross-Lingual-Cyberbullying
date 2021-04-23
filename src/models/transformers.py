@@ -6,7 +6,7 @@ import torch
 from transformers.optimization import get_linear_schedule_with_warmup
 import torch.nn.functional as F
 import math
-
+import os
 
 class TransformerBase(torch.nn.Module):
     def __init__(self, args):
@@ -14,6 +14,7 @@ class TransformerBase(torch.nn.Module):
         transformer_config = AutoConfig.from_pretrained(args.pretrained_model, return_dict=True,
                                                         output_attentions=True, output_hidden_states=True)
         self.transformer = AutoModel.from_pretrained(args.pretrained_model, config=transformer_config)
+        # self.transformer.save_pretrained(f'trained_models/{args.pretrained_model}')
         self.dropout = torch.nn.Dropout(p=0.1)
         self.linear = torch.nn.Sequential(torch.nn.Linear(transformer_config.hidden_size, args.max_seq_len),
                                           torch.nn.Tanh(),

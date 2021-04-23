@@ -156,6 +156,7 @@ class PANHateSpeechTaskDatasetWrapper:
     def __init__(self, args):
         self.cv = args.cv
         self.tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
+        # self.tokenizer.save_pretrained(f'trained_models/{args.tokenizer}')
         self.special_tokens_dict = PANHateSpeechTaskDatasetWrapper.SPECIAL_TOKENS[args.input_mode]
         self.tokenizer.add_special_tokens(self.special_tokens_dict)
 
