@@ -40,7 +40,7 @@ If you use our work, please use the following citation:
 title = {Unified and Multilingual Author Profiling for Detecting Haters},
 author = {Ipek Baris Schlicht and Angel Felipe Magnossão de Paula},
 pages = {1837--1845},
-url = {http://ceur-ws.org/Vol-XXX/#paper-157},
+url = {http://ceur-ws.org/Vol-2936/#paper-157},
 crossref = {CLEF-2021},
 }
 ```
